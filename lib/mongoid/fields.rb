@@ -411,7 +411,7 @@ module Mongoid
       def create_field_getter(name, meth, field)
         generated_methods.module_eval do
           re_define_method(meth) do
-            raw = read_attribute(name)
+            raw = read_raw_attribute(name)
             if lazy_settable?(field, raw)
               write_attribute(name, field.eval_default(self))
             else
@@ -461,7 +461,7 @@ module Mongoid
           re_define_method("#{meth}=") do |value|
             val = write_attribute(name, value)
             if field.foreign_key?
-              remove_ivar(field.metadata.name)
+              remove_ivar(field.association.name)
             end
             val
           end
@@ -480,7 +480,7 @@ module Mongoid
       def create_field_check(name, meth)
         generated_methods.module_eval do
           re_define_method("#{meth}?") do
-            value = read_attribute(name)
+            value = read_raw_attribute(name)
             lookup_attribute_presence(name, value)
           end
         end
@@ -498,7 +498,8 @@ module Mongoid
       def create_translations_getter(name, meth)
         generated_methods.module_eval do
           re_define_method("#{meth}_translations") do
-            (attributes[name] ||= {}).with_indifferent_access
+            attributes[name] ||= {}
+            attributes[name].with_indifferent_access
           end
           alias_method :"#{meth}_t", :"#{meth}_translations"
         end

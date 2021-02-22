@@ -42,21 +42,27 @@ module Mongoid
         #   to a class method to reject documents with.
         # @option *args [ Integer ] :limit The max number to create.
         # @option *args [ true, false ] :update_only Only update existing docs.
+        # @options *args [ true, false ] :autosave Whether autosave should be enabled on the
+        #   association. Note that since the default is true, setting autosave to nil will still
+        #   enable it.
         def accepts_nested_attributes_for(*args)
-          options = args.extract_options!
+          options = args.extract_options!.dup
+          options[:autosave] = true if options[:autosave].nil?
+
           options[:reject_if] = REJECT_ALL_BLANK_PROC if options[:reject_if] == :all_blank
           args.each do |name|
             meth = "#{name}_attributes="
             self.nested_attributes["#{name}_attributes"] = meth
-            metadata = relations[name.to_s]
-            raise Errors::NestedAttributesMetadataNotFound.new(self, name) unless metadata
-            autosave_nested_attributes(metadata)
+            association = relations[name.to_s]
+            raise Errors::NestedAttributesMetadataNotFound.new(self, name) unless association
+            autosave_nested_attributes(association) if options[:autosave]
+
             re_define_method(meth) do |attrs|
               _assigning do
-                if metadata.polymorphic? and metadata.inverse_type
-                  options = options.merge!(:class_name => self.send(metadata.inverse_type))
+                if association.polymorphic? and association.inverse_type
+                  options = options.merge!(:class_name => self.send(association.inverse_type))
                 end
-                metadata.nested_builder(attrs, options).build(self)
+                association.nested_builder(attrs, options).build(self)
               end
             end
           end
@@ -71,12 +77,17 @@ module Mongoid
         # @example Add the autosave if appropriate.
         #   Person.autosave_nested_attributes(metadata)
         #
-        # @param [ Metadata ] metadata The existing relation metadata.
+        # @param [ Association ] association The existing association metadata.
         #
         # @since 3.1.4
-        def autosave_nested_attributes(metadata)
-          unless metadata.autosave == false
-            autosave(metadata.merge!(autosave: true))
+        def autosave_nested_attributes(association)
+          # In order for the autosave functionality to work properly, the association needs to be
+          # marked as autosave despite the fact that the option isn't present. Because the method
+          # Association#autosave? is implemented by checking the autosave option, this is the most
+          # straightforward way to mark it.
+          if association.autosave? || (association.options[:autosave].nil? && !association.embedded?)
+            association.options[:autosave] = true
+            Association::Referenced::AutoSave.define_autosave!(association)
           end
         end
       end

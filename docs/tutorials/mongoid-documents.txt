@@ -9,7 +9,7 @@ Documents
 .. contents:: On this page
    :local:
    :backlinks: none
-   :depth: 1
+   :depth: 2
    :class: singlecol
 
 Documents are the core objects in Mongoid and any object that is to be persisted to the
@@ -124,6 +124,7 @@ Below is a list of valid types for fields.
 - ``BSON::Binary``
 - ``Range``
 - ``Regexp``
+- ``Set``
 - ``String``
 - ``Symbol``
 - ``Time``
@@ -153,6 +154,60 @@ Types that are not supported as dynamic attributes since they cannot be cast are
 - ``Date``
 - ``DateTime``
 - ``Range``
+
+
+Updating Container Fields
+*************************
+
+Be aware that, until
+`MONGOID-2951 <https://jira.mongodb.org/browse/MONGOID-2951>`_
+is resolved, all fields including container ones must be assigned to for
+their values to be persisted to the database.
+
+For example, adding to a set like this does not work:
+
+.. code-block:: ruby
+
+  class Band
+    include Mongoid::Document
+    
+    field :tours, type: Set
+  end
+  
+  band = Band.new
+  band.tours
+  # => #<Set: {}>
+
+  band.tours << 'London'
+  # => #<Set: {"London"}>
+  band.tours
+  # => #<Set: {}>
+
+Instead, the field value must be modified outside of the model and assigned
+back to the model as follows:
+
+.. code-block:: ruby
+
+  class Band
+    include Mongoid::Document
+    
+    field :tours, type: Set
+  end
+  
+  band = Band.new
+  
+  tours = band.tours
+  # => #<Set: {}>
+
+  tours << 'London'
+  # => #<Set: {"London"}>
+  
+  band.tours = tours
+  # => #<Set: {"London"}>
+  
+  band.tours
+  # => #<Set: {"London"}>
+
 
 Accessing Field Values
 **********************
@@ -247,6 +302,67 @@ or else the values will not store properly.
        save
      end
    end
+
+Regular Expression Fields
+*************************
+
+MongoDB supports storing regular expressions in documents, and querying using
+regular expressions. Of note for Ruby applications, MongoDB uses
+`Perl-compatible regular expressions (PCRE) <http://pcre.org/>`_
+and Ruby uses `Onigmo <https://github.com/k-takata/Onigmo>`_, which is a
+fork of `Oniguruma regular expression engine <https://github.com/kkos/oniguruma>`_.
+The two regular expression implementations generally provide equivalent
+functionality but have some important syntax differences.
+
+When a field is declared to be of type Regexp, Mongoid converts Ruby regular
+expressions to BSON regular expressions and stores the result in MongoDB.
+Retrieving the field from the database produces a ``BSON::Regexp::Raw``
+instance:
+
+.. code-block:: ruby
+
+  class Token
+    include Mongoid::Document
+    
+    field :pattern, type: Regexp
+  end
+  
+  token = Token.create!(pattern: /hello.world/m)
+  token.pattern
+  # => /hello.world/m
+  
+  token.reload
+  token.pattern
+  # => #<BSON::Regexp::Raw:0x0000555f505e4a20 @pattern="hello.world", @options="ms">
+
+Use ``#compile`` method on ``BSON::Regexp::Raw`` to get back the Ruby regular
+expression:
+
+.. code-block:: ruby
+
+  token.pattern.compile
+  # => /hello.world/m
+
+Note that, if the regular expression was not originally a Ruby one, calling
+``#compile`` on it may produce a different regular expression. For example,
+the following is a PCRE matching a string that ends in "hello":
+
+.. code-block:: ruby
+
+  BSON::Regexp::Raw.new('hello$', 's')   
+  # => #<BSON::Regexp::Raw:0x0000555f51441640 @pattern="hello$", @options="s">
+
+Compiling this regular expression produces a Ruby regular expression that
+matches strings containing "hello" before a newline, besides strings ending in
+"hello":
+
+.. code-block:: ruby
+
+  BSON::Regexp::Raw.new('hello$', 's').compile =~ "hello\nworld"
+  # => 0
+
+This is because the meaning of ``$`` is different between PCRE and Ruby
+regular expressions.
 
 Defaults
 ********
@@ -418,58 +534,159 @@ For cases when you do not want to have ``BSON::ObjectId`` ids, you can override 
 Dynamic Fields
 --------------
 
-By default, Mongoid doesn't support dynamic fields. You can tell Mongoid that you want
-to add dynamic fields by including ``Mongoid::Attributes::Dynamic`` in a model.
-``Mongoid::Attributes::Dynamic`` will allow attributes to get set and persisted on the
-document even if a field was not defined for them. There is a slight 'gotcha' however when
-dealing with dynamic attributes in that Mongoid is not completely lenient about the use of
-``method_missing`` and breaking the public interface of the Document class.
+By default, Mongoid requires all fields that may be set on a document to
+be explicitly defined using ``field`` declarations. Mongoid also supports
+creating fields on the fly from an arbitrary hash or documents stored in
+the database. When a model uses fields not explicitly defined, such fields
+are called *dynamic fields*.
+
+To enable dynamic fields, include ``Mongoid::Attributes::Dynamic`` module
+in the model:
 
 .. code-block:: ruby
 
-   class Person
-     include Mongoid::Document
-     include Mongoid::Attributes::Dynamic
-   end
+  class Person
+    include Mongoid::Document
+    include Mongoid::Attributes::Dynamic
+  end
+  
+  bob = Person.new(name: 'Bob', age: 42)
+  bob.name
+  # => "Bob"
 
-When dealing with dynamic attributes, the following rules apply:
+It is possible to use ``field`` declarations and dynamic fields in the same
+model class. Attributes for which there is a ``field`` declaration will be
+treated according to the ``field`` declaration, with remaining attributes
+being treated as dynamic fields.
 
-If the attribute exists in the document, Mongoid will provide you with your standard
-getter and setter methods. For example, consider a person who has an attribute of
-"gender" set on the document:
+Attribute values in the dynamic fields must initially be set by either
+passing the attribute hash to the constructor, mass assignment via
+``attributes=``, mass assignment via ``[]=``, using ``write_attribute``,
+or they must already be present in the database.
+
+.. code-block:: ruby
+  
+  # OK
+  bob = Person.new(name: 'Bob')
+  
+  # OK
+  bob = Person.new
+  bob.attributes = {age: 42}
+  
+  # OK
+  bob = Person.new
+  bob['age'] = 42
+  
+  # Raises NoMethodError: undefined method age=
+  bob = Person.new
+  bob.age = 42
+  
+  # OK
+  bob = Person.new
+  # OK - string access
+  bob.write_attribute('age', 42)
+  # OK - symbol access
+  bob.write_attribute(:name, 'Bob')
+  
+  # OK, initializes attributes from whatever is in the database
+  bob = Person.find('123')
+
+If an attribute is not present in a particular model instance's attributes
+hash, both the reader and the writer for the corresponding field are not
+defined, and invoking them raises ``NoMethodError``:
+
+.. code-block:: ruby
+  
+  bob = Person.new
+  bob.attributes = {age: 42}
+  
+  bob.age
+  # => 42
+  
+  # raises NoMethodError
+  bob.name
+  
+  # raises NoMethodError
+  bob.name = 'Bob'
+  
+  # OK
+  bob['name'] = 'Bob'
+  
+  bob.name
+  # => "Bob"
+
+Attributes can always be read using mass attribute access or ``read_attribute``
+(this appies to models not using dynamic fields as well):
 
 .. code-block:: ruby
 
-   # Set the person's gender to male.
-   person[:gender] = "Male"
-   person.gender = "Male"
+  bob = Person.new(age: 42)
+  
+  # OK - string access
+  bob['name']
+  # => nil
+  
+  # OK - symbol access
+  bob[:name]
+  # => nil
+  
+  # OK - string access
+  bob['age']
+  # => 42
+  
+  # OK - symbol access
+  bob[:age]
+  # => 42
+  
+  # OK
+  bob.attributes['name']
+  # => nil
+  
+  # OK
+  bob.attributes['age']
+  # => 42
+  
+  # Returns nil - keys are always strings
+  bob.attributes[:age]
+  # => nil
+  
+  # OK
+  bob.read_attribute('name')
+  # => nil
+  
+  # OK
+  bob.read_attribute(:name)
+  # => nil
+  
+  # OK - string access
+  bob.read_attribute('age')
+  # => 42
+  
+  # OK - symbol access
+  bob.read_attribute(:age)
+  # => 42
 
-   # Get the person's gender.
-   person.gender
 
-If the attribute does not already exist on the document, Mongoid will not provide you with
-the getters and setters and will enforce normal ``method_missing`` behavior. In this case you
-must use the other provided accessor methods:
-(``[]`` and ``[]=``) or (``read_attribute`` and ``write_attribute``).
+Special Characters in Field Names
+*********************************
+
+Mongoid permits dynamic field names to include spaces and punctuation:
 
 .. code-block:: ruby
 
-   # Raise a NoMethodError if value isn't set.
-   person.gender
-   person.gender = "Male"
+  bob = Person.new('hello world' => 'MDB')
+  bob.send('hello world')
+  # => "MDB"
+  
+  bob.write_attribute("hello%world", 'MDB')
+  bob[:"hello%world"]
+  # => "MDB"
 
-   # Retrieve a dynamic field safely.
-   person[:gender]
-   person.read_attribute(:gender)
-
-   # Write a dynamic field safely.
-   person[:gender] = "Male"
-   person.write_attribute(:gender, "Male")
 
 Localized Fields
 ----------------
 
-Mongoid now supports localized fields without the need of an additional gem.
+Mongoid supports localized fields via `i18n <https://github.com/ruby-i18n/i18n>`_.
 
 .. code-block:: ruby
 
@@ -683,7 +900,7 @@ down into their child documents, but not vise-versa.
 
    class Browser < Canvas
      field :version, type: Integer
-     scope :recent, where(:version.gt => 3)
+     scope :recent, ->{ where(:version.gt => 3) }
    end
 
    class Firefox < Browser

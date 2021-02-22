@@ -27,8 +27,8 @@ module Mongoid
     include Modifiable
     include Scopable
     include Clients::Options
-    include Options
     include Clients::Sessions
+    include Options
 
     # Static array used to check with method missing - we only need to ever
     # instantiate once.
@@ -36,7 +36,7 @@ module Mongoid
     # @since 4.0.0
     CHECK = []
 
-    attr_accessor :embedded, :klass, :parent_document, :metadata
+    attr_accessor :embedded, :klass, :parent_document, :association
 
     # Returns true if the supplied +Enumerable+ or +Criteria+ is equal to the results
     # of this +Criteria+ or the criteria itself.
@@ -435,7 +435,13 @@ module Mongoid
     #
     # @since 3.1.0
     def for_js(javascript, scope = {})
-      js_query(BSON::CodeWithScope.new(javascript, scope))
+      code = if scope.empty?
+        # CodeWithScope is not supported for $where as of MongoDB 4.4
+        BSON::Code.new(javascript)
+      else
+        BSON::CodeWithScope.new(javascript, scope)
+      end
+      js_query(code)
     end
 
     private

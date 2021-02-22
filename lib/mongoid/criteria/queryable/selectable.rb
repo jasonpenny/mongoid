@@ -24,7 +24,7 @@ module Mongoid
         # @since 2.0.0
         POLYGON = "Polygon"
 
-        # @attribute [rw] negating If the next spression is negated.
+        # @attribute [rw] negating If the next expression is negated.
         # @attribute [rw] selector The query selector.
         attr_accessor :negating, :selector
 
@@ -134,13 +134,21 @@ module Mongoid
           ::Boolean.evolve(value)
         end
 
-        # Add a $geoIntersects or $geoWithin selection. Symbol operators must be used as shown in
-        # the examples to expand the criteria.
+        # Add a $geoIntersects or $geoWithin selection. Symbol operators must
+        # be used as shown in the examples to expand the criteria.
         #
         # @note The only valid geometry shapes for a $geoIntersects are:
         #   :intersects_line, :intersects_point, and :intersects_polygon.
         #
-        # @note The only valid geometry shape for a $geoWithin is :within_polygon
+        # @note The only valid options for a $geoWithin query are the geometry
+        #   shape :within_polygon and the operator :within_box.
+        #
+        # @note The :within_box operator for the $geoWithin query expects the
+        #   lower left (south west) coordinate pair as the first argument and
+        #   the upper right (north east) as the second argument.
+        #   Important: When latitude and longitude are passed, longitude is
+        #   expected as the first element of the coordinate pair.
+        #   Source: https://docs.mongodb.com/manual/reference/operator/query/box/
         #
         # @example Add a geo intersect criterion for a line.
         #   query.geo_spacial(:location.intersects_line => [[ 1, 10 ], [ 2, 10 ]])
@@ -153,6 +161,9 @@ module Mongoid
         #
         # @example Add a geo within criterion for a polygon.
         #   query.geo_spacial(:location.within_polygon => [[ 1, 10 ], [ 2, 10 ], [ 1, 10 ]])
+        #
+        # @example Add a geo within criterion for a box.
+        #   query.geo_spacial(:location.within_box => [[ 1, 10 ], [ 2, 10 ])
         #
         # @param [ Hash ] criterion The criterion.
         #
@@ -174,6 +185,7 @@ module Mongoid
         key :within_polygon, :override, "$geoWithin", "$geometry" do |value|
           { "type" => POLYGON, "coordinates" => value }
         end
+        key :within_box, :override, "$geoWithin", "$box"
 
         # Add the $gt criterion to the selector.
         #
@@ -422,7 +434,7 @@ module Mongoid
         # @since 1.0.0
         def not(*criterion)
           if criterion.empty?
-            tap { |query| query.negating = true }
+            dup.tap { |query| query.negating = true }
           else
             __override__(criterion.first, "$not")
           end
@@ -501,6 +513,11 @@ module Mongoid
         # @example Construct a text search selector with options.
         #   selectable.text_search("testing", :$language => "fr")
         #
+        # @note Per https://docs.mongodb.com/manual/reference/operator/query/text/
+        #   it is not currently possible to supply multiple text search
+        #   conditions in a query. Mongoid will build such a query but the
+        #   server will return an error when trying to execute it.
+        #
         # @param [ String, Symbol ] terms A string of terms that MongoDB parses
         #   and uses to query the text index.
         # @param [ Hash ] opts Text search options. See MongoDB documentation
@@ -512,9 +529,19 @@ module Mongoid
         def text_search(terms, opts = nil)
           clone.tap do |query|
             if terms
-              criterion = { :$text => { :$search => terms } }
-              criterion[:$text].merge!(opts) if opts
-              query.selector = criterion
+              criterion = {'$text' => { '$search' => terms }}
+              criterion['$text'].merge!(opts) if opts
+              if query.selector['$text']
+                # Per https://docs.mongodb.com/manual/reference/operator/query/text/
+                # multiple $text expressions are not currently supported by
+                # MongoDB server, but build the query correctly instead of
+                # overwriting previous text search condition with the currently
+                # given one.
+                Mongoid.logger.warn('Multiple $text expressions per query are not currently supported by the server')
+                query.selector = {'$and' => [query.selector]}.merge(criterion)
+              else
+                query.selector = query.selector.merge(criterion)
+              end
             end
           end
         end
@@ -535,6 +562,9 @@ module Mongoid
         #
         # @since 1.0.0
         def where(criterion = nil)
+          # We need to save the criterion in an instance variable so Modifiable methods
+          # know how to create a polymorphic object.
+          @criterion = criterion
           criterion.is_a?(String) ? js_query(criterion) : expr_query(criterion)
         end
 
@@ -600,8 +630,6 @@ module Mongoid
         # Take the provided criterion and store it as a selection in the query
         # selector.
         #
-        # @api private
-        #
         # @example Store the selection.
         #   selectable.selection({ field: "value" })
         #
@@ -610,6 +638,7 @@ module Mongoid
         # @return [ Selectable ] The cloned selectable.
         #
         # @since 1.0.0
+        # @api private
         def selection(criterion = nil)
           clone.tap do |query|
             if criterion

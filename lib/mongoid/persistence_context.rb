@@ -107,9 +107,19 @@ module Mongoid
     #
     # @since 6.0.0
     def client
+      client_options = send(:client_options)
+      if client_options[:read].is_a?(Symbol)
+        client_options = client_options.merge(read: {mode: client_options[:read]})
+      end
       @client ||= (client = Clients.with_name(client_name)
                     client = client.use(database_name) if database_name_option
                     client.with(client_options))
+    end
+
+    def client_name
+      @client_name ||= options[:client] ||
+                         Threaded.client_override ||
+                         storage_options && __evaluate__(storage_options[:client])
     end
 
     # Determine if this persistence context is equal to another.
@@ -128,12 +138,6 @@ module Mongoid
     end
 
     private
-
-    def client_name
-      @client_name ||= options[:client] ||
-                         Threaded.client_override ||
-                         storage_options && __evaluate__(storage_options[:client])
-    end
 
     def set_options!(opts)
       @options ||= opts.each.reduce({}) do |_options, (key, value)|
@@ -165,6 +169,9 @@ module Mongoid
 
       # Set the persistence context for a particular class or model instance.
       #
+      # If there already is a persistence context set, options in the existing
+      # context are combined with options given to the set call.
+      #
       # @example Set the persistence context for a class or model instance.
       #  PersistenceContext.set(model)
       #
@@ -176,9 +183,19 @@ module Mongoid
       #
       # @since 6.0.0
       def set(object, options_or_context)
-        context = PersistenceContext.new(object, options_or_context.is_a?(PersistenceContext) ?
-                                                   options_or_context.options : options_or_context)
-        Thread.current["[mongoid][#{object.object_id}]:context"] = context
+        key = "[mongoid][#{object.object_id}]:context"
+        existing_context = Thread.current[key]
+        existing_options = if existing_context
+          existing_context.options
+        else
+          {}
+        end
+        if options_or_context.is_a?(PersistenceContext)
+          options_or_context = options_or_context.options
+        end
+        new_options = existing_options.merge(options_or_context)
+        context = PersistenceContext.new(object, new_options)
+        Thread.current[key] = context
       end
 
       # Get the persistence context for a particular class or model instance.
@@ -202,14 +219,16 @@ module Mongoid
       #
       # @param [ Class, Object ] object The class or model instance.
       # @param [ Mongo::Cluster ] cluster The original cluster before this context was used.
+      # @param [ Mongoid::PersistenceContext ] original_context The original persistence
+      #   context that was set before this context was used.
       #
       # @since 6.0.0
-      def clear(object, cluster = nil)
+      def clear(object, cluster = nil, original_context = nil)
         if context = get(object)
           context.client.close unless (context.cluster.equal?(cluster) || cluster.nil?)
         end
       ensure
-        Thread.current["[mongoid][#{object.object_id}]:context"] = nil
+        Thread.current["[mongoid][#{object.object_id}]:context"] = original_context
       end
     end
   end

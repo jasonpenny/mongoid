@@ -69,7 +69,7 @@ module Mongoid
       #
       # @since 2.3.1
       def mongoid_id?
-        self =~ /\A(|_)id$/
+        self =~ /\A(|_)id\z/
       end
 
       # Is the string a number? The literals "NaN", "Infinity", and "-Infinity"
@@ -82,7 +82,9 @@ module Mongoid
       #
       # @since 3.0.0
       def numeric?
-        true if Float(self) rescue (self =~ /^NaN|\-?Infinity$/)
+        !!Float(self)
+      rescue ArgumentError
+        (self =~ /\A(?:NaN|-?Infinity)\z/) == 0
       end
 
       # Get the string as a getter string.
@@ -94,7 +96,7 @@ module Mongoid
       #
       # @since 1.0.0
       def reader
-        delete("=").sub(/\_before\_type\_cast$/, '')
+        delete("=").sub(/\_before\_type\_cast\z/, '')
       end
 
       # Is this string a writer?

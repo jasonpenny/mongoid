@@ -212,7 +212,7 @@ describe Mongoid::Atomic::Modifiers do
         it "adds the push all modifiers" do
           expect(modifiers).to eq(
             { "$push" =>
-                { "addresses" => { '$each' => [
+              { "addresses" => { '$each' => [
                   { "street" => "Oxford St" }
                 ] }
               }
@@ -303,7 +303,7 @@ describe Mongoid::Atomic::Modifiers do
               conflicts: { "$push" =>
                 { "addresses" => { '$each' => [
                     { "street" => "Oxford St" }
-                  ] }
+                  ]}
                 }
               }
             }

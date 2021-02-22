@@ -816,7 +816,7 @@ describe Mongoid::Fields do
 
     context "when the field name conflicts with mongoid's internals" do
 
-      [:__metadata, :invalid].each do |meth|
+      [:_association, :invalid].each do |meth|
         context "when the field is named #{meth}" do
 
           it "raises an error" do
@@ -1171,7 +1171,7 @@ describe Mongoid::Fields do
     end
 
     let(:decimal) do
-      BigDecimal.new("1000000.00")
+      BigDecimal("1000000.00")
     end
 
     context "when setting to a big decimal" do

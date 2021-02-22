@@ -4,7 +4,6 @@ require "mongoid/evolvable"
 require "mongoid/extensions"
 require "mongoid/errors"
 require "mongoid/threaded"
-require "mongoid/relations"
 require "mongoid/atomic"
 require "mongoid/attributes"
 require "mongoid/contextual"
@@ -14,7 +13,9 @@ require "mongoid/criteria"
 require "mongoid/factory"
 require "mongoid/fields"
 require "mongoid/timestamps"
+require "mongoid/association"
 require "mongoid/composable"
+require "mongoid/touchable"
 
 module Mongoid
 
@@ -23,6 +24,7 @@ module Mongoid
   module Document
     extend ActiveSupport::Concern
     include Composable
+    include Mongoid::Touchable::InstanceMethods
 
     attr_accessor :__selected_fields
     attr_reader :new_record
@@ -178,6 +180,13 @@ module Mongoid
 
     # Calls #as_json on the document with additional, Mongoid-specific options.
     #
+    # @note Rails 6 changes return value of as_json for non-primitive types
+    #   such as BSON::ObjectId. In Rails <= 5, as_json returned these as
+    #   instances of the class. In Rails 6, these are returned serialized to
+    #   primitive types (e.g. {"$oid"=>"5bcfc40bde340b37feda98e9"}).
+    #   See https://github.com/rails/rails/commit/2e5cb980a448e7f4ab00df6e9ad4c1cc456616aa
+    #   for more information.
+    #
     # @example Get the document as json.
     #   document.as_json(compact: true)
     #
@@ -190,11 +199,11 @@ module Mongoid
     #
     # @since 5.1.0
     def as_json(options = nil)
-      if options && (options[:compact] == true)
-        super(options).reject! { |k,v| v.nil? }
-      else
-        super(options)
+      rv = super
+      if options && options[:compact]
+        rv = rv.compact
       end
+      rv
     end
 
     # Returns an instance of the specified class with the attributes,
@@ -218,8 +227,9 @@ module Mongoid
       became = klass.new(clone_document)
       became._id = _id
       became.instance_variable_set(:@changed_attributes, changed_attributes)
-      became.instance_variable_set(:@errors, ActiveModel::Errors.new(became))
-      became.errors.instance_variable_set(:@messages, errors.instance_variable_get(:@messages))
+      new_errors = ActiveModel::Errors.new(became)
+      new_errors.copy!(errors)
+      became.instance_variable_set(:@errors, new_errors)
       became.instance_variable_set(:@new_record, new_record?)
       became.instance_variable_set(:@destroyed, destroyed?)
       became.changed_attributes["_type"] = self.class.to_s
@@ -281,7 +291,7 @@ module Mongoid
         without_autobuild do
           relation, stored = send(name), meta.store_as
           if attributes.key?(stored) || !relation.blank?
-            if relation
+            if !relation.nil?
               attributes[stored] = relation.send(:as_attributes)
             else
               attributes.delete(stored)

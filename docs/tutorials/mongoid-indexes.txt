@@ -1,8 +1,16 @@
+.. _mongoid-indexes:
+
 =======
 Indexes
 =======
 
 .. default-domain:: mongodb
+
+.. contents:: On this page
+   :local:
+   :backlinks: none
+   :depth: 1
+   :class: singlecol
 
 You can define indexes on documents using the index macro. Provide the key for
 the index along with a direction. For additional options, supply them in a second
@@ -60,8 +68,9 @@ Indexes can be run in the background in cases where they may take some time:
      index({ ssn: 1 }, { unique: true, background: true })
    end
 
-For unique indexes that are defined for a column that might already have duplicate
-values, you can drop the duplicate entries:
+*Deprecated:* When using MongoDB 2.6, you can drop the duplicate entries
+for unique indexes that are defined for a column that might
+already have duplicate values by specifying the ``drop_dups`` option:
 
 .. code-block:: ruby
 
@@ -70,6 +79,8 @@ values, you can drop the duplicate entries:
      field :ssn
      index({ ssn: 1 }, { unique: true, drop_dups: true })
    end
+
+The ``drop_dups`` option has been `removed as of MongoDB 3.0 <https://docs.mongodb.com/manual/release-notes/3.0-compatibility/#remove-dropdups-option>`_.
 
 For geospatial indexes, make sure the field you are indexing is an Array.
 
@@ -113,6 +124,10 @@ Mongoid also provides a rake task to delete all secondary indexes.
 .. code-block:: bash
 
    $ rake db:mongoid:remove_indexes
+
+Note: the output of these rake tasks goes to the default logger configured
+by Rails. This is usually a file like ``log/development.log`` and not standard
+output.
 
 These create/remove indexes commands also works for just one model by running
 

@@ -76,13 +76,13 @@ describe Mongoid::Atomic do
             person.addresses.build(street: "Oxford St")
           end
 
-          it "returns a $set and $push for modifications" do
+          it "returns a $set and $push with $each for modifications" do
             expect(person.atomic_updates).to eq(
               {
                 "$set" => { "title" => "Sir" },
-                "$push" => { "addresses" => { '$each' => [
+                "$push" => { "addresses" => { "$each" => [
                     { "_id" => "oxford-st", "street" => "Oxford St" }
-                  ]} }
+                  ] } }
               }
             )
           end
@@ -271,7 +271,7 @@ describe Mongoid::Atomic do
                             "_id" => location.id,
                             "name" => "Home"
                           ]
-                        }] }
+                        }]}
                       }
                     }
                   }

@@ -13,6 +13,7 @@ require "active_support/time_with_zone"
 require "active_model"
 
 require "mongo"
+require 'mongo/active_support'
 
 require "mongoid/version"
 require "mongoid/config"
@@ -101,5 +102,5 @@ module Mongoid
   #   Mongoid.database = Mongo::Connection.new.db("test")
   #
   # @since 1.0.0
-  delegate(*(Config.public_instance_methods(false) - [ :logger=, :logger ] << { to: Config }))
+  delegate(*(Config.public_instance_methods(false) - [ :logger=, :logger ]), to: Config)
 end

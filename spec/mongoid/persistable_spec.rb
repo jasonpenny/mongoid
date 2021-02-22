@@ -57,7 +57,7 @@ describe Mongoid::Persistable do
             "$bit" => { "likes" => { :and => 13 }},
             "$set" => { "name" => "Placebo" },
             "$unset" => { "origin" => true }},
-           { session: nil }]
+            { :session => nil } ]
         end
 
         before do
@@ -83,8 +83,8 @@ describe Mongoid::Persistable do
             "$inc" => { "member_count" => 10 },
             "$bit" => { "likes" => { :and => 13 }},
             "$set" => { "name" => "Placebo" },
-            "$unset" => { "origin" => true }},
-           { :session => nil } ]
+            "$unset" => { "origin" => true } },
+            { :session => nil } ]
         end
 
         before do
@@ -107,12 +107,12 @@ describe Mongoid::Persistable do
       context "when given multiple operations of the same type" do
 
         let(:operations) do
-          [{
+         [{
             "$inc" => { "member_count" => 10, "other_count" => 10 },
             "$bit" => { "likes" => { :and => 13 }},
             "$set" => { "name" => "Placebo" },
             "$unset" => { "origin" => true }},
-            { session: nil }]
+            { :session => nil } ]
         end
 
         before do
@@ -149,7 +149,7 @@ describe Mongoid::Persistable do
             "$bit" => { "likes" => { :and => 13 }},
             "$set" => { "name" => "Placebo" },
             "$unset" => { "origin" => true }},
-            { session: nil }]
+            { :session => nil } ]
         end
 
         before do
@@ -199,6 +199,21 @@ describe Mongoid::Persistable do
       it "returns true" do
         expect(document.atomically).to be true
       end
+    end
+
+    context "when the block has no operations" do
+        before do
+          expect_any_instance_of(Mongo::Collection::View).to_not receive(:update_one)
+        end
+
+        let!(:update) do
+          document.atomically do
+          end
+        end
+
+        it "doesn't update the document" do
+          expect(document.reload.origin).to eq("London")
+        end
     end
   end
 

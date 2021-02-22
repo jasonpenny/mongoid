@@ -14,14 +14,14 @@ Project Tracking
 ----------------
 
 * [Mongoid Website and Documentation](http://mongoid.org)
-* [Mongoid Google Group](http://groups.google.com/group/mongoid)
+* [MongoDB Community Forum](https://developer.mongodb.com/community/forums/tags/c/drivers-odms-connectors/7/mongoid-odm)
 * [Stackoverflow](http://stackoverflow.com/questions/tagged/mongoid)
 * [#mongoid](http://webchat.freenode.net/?channels=mongoid) on freenode IRC
 
 Compatibility
 -------------
 
-Mongoid is tested against MRI 2.2, 2.3 and JRuby (9.1).
+Mongoid is tested against MRI 2.2-2.5 and JRuby 9.1-9.2.
 
 Documentation
 -------------
@@ -31,7 +31,8 @@ Please see the [MongoDB website](http://docs.mongodb.org/ecosystem/tutorial/ruby
 License
 -------
 
-Copyright (c) 2009-2017 Durran Jordan
+Copyright (c) 2009-2016 Durran Jordan
+Copyright (c) 2015-2020 MongoDB, Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the

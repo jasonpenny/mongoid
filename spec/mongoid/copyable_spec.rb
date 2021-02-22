@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 require "spec_helper"
 
+require_relative './copyable_spec_models'
+
 describe Mongoid::Copyable do
 
   [ :clone, :dup ].each do |method|
@@ -33,6 +35,10 @@ describe Mongoid::Copyable do
 
       let!(:game) do
         person.build_game(name: "Tron")
+      end
+
+      let!(:name_translations) do
+        person.name.translations.build(language: 'en')
       end
 
       context "when the document has an id field in the database" do
@@ -86,13 +92,45 @@ describe Mongoid::Copyable do
 
         context "and dynamic attributes are not set" do
 
-          it "clones" do
-            t = StoreAsDupTest1.new(:name => "hi")
-            t.build_store_as_dup_test2(:name => "there")
-            t.save
-            copy = t.send(method)
-            expect(copy.store_as_dup_test2.name).to eq(t.store_as_dup_test2.name)
+          context 'embeds_one' do
+
+            it "clones" do
+              t = StoreAsDupTest1.new(:name => "hi")
+              t.build_store_as_dup_test2(:name => "there")
+              t.save
+              copy = t.send(method)
+              expect(copy.object_id).not_to eq(t.object_id)
+              expect(copy.store_as_dup_test2.name).to eq(t.store_as_dup_test2.name)
+            end
           end
+
+          context 'embeds_many' do
+
+
+            it "clones" do
+              t = StoreAsDupTest3.new(:name => "hi")
+              t.store_as_dup_test4s << StoreAsDupTest4.new
+              t.save
+              copy = t.send(method)
+              expect(copy.object_id).not_to eq(t.object_id)
+              expect(copy.store_as_dup_test4s).not_to be_empty
+              expect(copy.store_as_dup_test4s.first.object_id).not_to eq(t.store_as_dup_test4s.first.object_id)
+            end
+          end
+        end
+      end
+
+      context 'nested embeds_many' do
+        it 'works' do
+          a = CopyableSpec::A.new
+          a.locations << CopyableSpec::Location.new
+          a.locations.first.buildings << CopyableSpec::Building.new
+          a.save!
+
+          new_a = a.send(method)
+
+          expect(new_a.locations.length).to be 1
+          expect(new_a.locations.first.buildings.length).to be 1
         end
       end
 
@@ -142,6 +180,40 @@ describe Mongoid::Copyable do
           I18n.locale = :en
           expect(copy.addresses.first.name).to eq("Bond")
         end
+      end
+
+      context "when cloning a document with polymorphic embedded documents with multiple language field" do
+
+        let!(:shipment_address) do
+          person.addresses.build({ shipping_name: "Title" }, ShipmentAddress)
+        end
+
+        before do
+          I18n.enforce_available_locales = false
+          I18n.locale = 'pt_BR'
+          person.addresses.type(ShipmentAddress).each { |address| address.shipping_name = "Título" }
+          person.save
+        end
+
+        after do
+          I18n.locale = :en
+        end
+
+        let!(:from_db) do
+          Person.find(person.id)
+        end
+
+        let(:copy) do
+          from_db.send(method)
+        end
+
+        it 'sets embedded translations' do
+          I18n.locale = 'pt_BR'
+          copy.addresses.type(ShipmentAddress).each do |address|
+            expect(address.shipping_name).to eq("Título")
+          end
+        end
+
       end
 
       context "when cloning a loaded document" do
@@ -211,12 +283,24 @@ describe Mongoid::Copyable do
             expect(copy.addresses).to eq(person.addresses)
           end
 
+          it "copys deep embeds many documents" do
+            expect(copy.name.translations).to eq(person.name.translations)
+          end
+
           it "sets the embedded many documents as new" do
             expect(copy.addresses.first).to be_new_record
           end
 
+          it "sets the deep embedded many documents as new" do
+            expect(copy.name.translations.first).to be_new_record
+          end
+
           it "creates new embeds many instances" do
             expect(copy.addresses).to_not equal(person.addresses)
+          end
+
+          it "creates new deep embeds many instances" do
+            expect(copy.name.translations).to_not equal(person.name.translations)
           end
 
           it "copys embeds one documents" do

@@ -1073,6 +1073,26 @@ describe Mongoid::Criteria::Queryable::Selectable do
           })
         end
 
+        context "when used with the $box operator ($geoWithin query) " do
+          let(:selection) do
+            query.geo_spacial(
+              :location.within_box => [[ 1, 10 ], [ 2, 10 ]]
+            )
+          end
+
+          it "adds the $geoIntersects expression" do
+            expect(selection.selector).to eq({
+              "location" => {
+                "$geoWithin" => {
+                  "$box" => [
+                    [ 1, 10 ], [ 2, 10 ]
+                  ]
+                }
+              }
+            })
+          end
+        end
+
         it_behaves_like "a cloning selection"
       end
     end
@@ -2408,7 +2428,7 @@ describe Mongoid::Criteria::Queryable::Selectable do
       end
     end
 
-    context "when chaninning the criterion" do
+    context "when chaining the criterion" do
 
       context "when the criterion are for different fields" do
 
@@ -2635,225 +2655,6 @@ describe Mongoid::Criteria::Queryable::Selectable do
               { "first" => [ 1, 2 ] },
               { "first" => [ 3, 4 ] }
             ]
-          })
-        end
-
-        it "returns a cloned query" do
-          expect(selection).to_not equal(query)
-        end
-      end
-    end
-  end
-
-  describe "#not" do
-
-    context "when provided no criterion" do
-
-      let(:selection) do
-        query.not
-      end
-
-      it "does not add any criterion" do
-        expect(selection.selector).to eq({})
-      end
-
-      it "returns the query" do
-        expect(selection).to eq(query)
-      end
-
-      it "returns a non cloned query" do
-        expect(selection).to equal(query)
-      end
-
-      context "when the following criteria is a query method" do
-
-        let(:selection) do
-          query.not.all(field: [ 1, 2 ])
-        end
-
-        it "negates the all selection" do
-          expect(selection.selector).to eq(
-            { "field" => { "$not" => { "$all" => [ 1, 2 ] }}}
-          )
-        end
-
-        it "returns a cloned query" do
-          expect(selection).to_not equal(query)
-        end
-
-        it "removes the negation on the clone" do
-          expect(selection).to_not be_negating
-        end
-      end
-
-      context "when the following criteria is a gt method" do
-
-        let(:selection) do
-          query.not.gt(age: 50)
-        end
-
-        it "negates the gt selection" do
-          expect(selection.selector).to eq(
-            { "age" => { "$not" => { "$gt" => 50 }}}
-          )
-        end
-
-        it "returns a coned query" do
-          expect(selection).to_not eq(query)
-        end
-
-        it "removes the negation on the clone" do
-          expect(selection).to_not be_negating
-        end
-      end
-
-      context "when the following criteria is a where" do
-
-        let(:selection) do
-          query.not.where(field: 1, :other.in => [ 1, 2 ])
-        end
-
-        it "negates the selection with an operator" do
-          expect(selection.selector).to eq(
-            { "field" => { "$ne" => 1 }, "other" => { "$not" => { "$in" => [ 1, 2 ] }}}
-          )
-        end
-
-        it "returns a cloned query" do
-          expect(selection).to_not equal(query)
-        end
-
-        it "removes the negation on the clone" do
-          expect(selection).to_not be_negating
-        end
-      end
-
-      context "when the following criteria is a where with a regexp" do
-
-        let(:selection) do
-          query.not.where(field: 1, other: /test/)
-        end
-
-        it "negates the selection with an operator" do
-          expect(selection.selector).to eq(
-            { "field" => { "$ne" => 1 }, "other" => { "$not" => /test/ } }
-          )
-        end
-
-        it "returns a cloned query" do
-          expect(selection).to_not equal(query)
-        end
-
-        it "removes the negation on the clone" do
-          expect(selection).to_not be_negating
-        end
-
-      end
-    end
-
-    context "when provided nil" do
-
-      let(:selection) do
-        query.not(nil)
-      end
-
-      it "does not add any criterion" do
-        expect(selection.selector).to eq({})
-      end
-
-      it "returns the query" do
-        expect(selection).to eq(query)
-      end
-
-      it "returns a cloned query" do
-        expect(selection).to_not equal(query)
-      end
-    end
-
-    context "when provided a single criterion" do
-
-      let(:selection) do
-        query.not(field: /test/)
-      end
-
-      it "adds the $not selector" do
-        expect(selection.selector).to eq({
-          "field" => { "$not" => /test/ }
-        })
-      end
-
-      it "returns a cloned query" do
-        expect(selection).to_not equal(query)
-      end
-    end
-
-    context "when provided multiple criterion" do
-
-      context "when the criterion are for different fields" do
-
-        let(:selection) do
-          query.not(first: /1/, second: /2/)
-        end
-
-        it "adds the $not selectors" do
-          expect(selection.selector).to eq({
-            "first" => { "$not" => /1/ },
-            "second" => { "$not" => /2/ }
-          })
-        end
-
-        it "returns a cloned query" do
-          expect(selection).to_not equal(query)
-        end
-      end
-    end
-
-    context "when chaining the criterion" do
-
-      context "when the criterion are for different fields" do
-
-        let(:selection) do
-          query.not(first: /1/).not(second: /2/)
-        end
-
-        it "adds the $not selectors" do
-          expect(selection.selector).to eq({
-            "first" => { "$not" => /1/ },
-            "second" => { "$not" => /2/ }
-          })
-        end
-
-        it "returns a cloned query" do
-          expect(selection).to_not equal(query)
-        end
-      end
-
-      context "when the criterion are on the same field" do
-
-        let(:selection) do
-          query.not(first: /1/).not(first: /2/)
-        end
-
-        it "overwrites the first $not selector" do
-          expect(selection.selector).to eq({
-            "first" =>  { "$not" => /2/ }
-          })
-        end
-
-        it "returns a cloned query" do
-          expect(selection).to_not equal(query)
-        end
-      end
-
-      context "when the criterion are a double negative" do
-
-        let(:selection) do
-          query.not.where(:first.not => /1/)
-        end
-
-        it "does not double the $not selector" do
-          expect(selection.selector).to eq({
-            "first" =>  { "$not" => /1/ }
           })
         end
 
@@ -3369,7 +3170,7 @@ describe Mongoid::Criteria::Queryable::Selectable do
       end
 
       it "constructs a text search document" do
-        expect(selection.selector).to eq({ :$text => { :$search => "testing" }})
+        expect(selection.selector).to eq({ '$text' => { '$search' => "testing" }})
       end
 
       it "returns the cloned selectable" do
@@ -3383,14 +3184,33 @@ describe Mongoid::Criteria::Queryable::Selectable do
         end
 
         it "constructs a text search document" do
-          expect(selection.selector[:$text][:$search]).to eq("essais")
+          expect(selection.selector['$text']['$search']).to eq("essais")
         end
 
         it "add the options to the text search document" do
-          expect(selection.selector[:$text][:$language]).to eq("fr")
+          expect(selection.selector['$text'][:$language]).to eq("fr")
         end
 
         it_behaves_like "a cloning selection"
+      end
+    end
+
+    context 'when given more than once' do
+      let(:selection) do
+        query.text_search("one").text_search('two')
+      end
+
+      # MongoDB server can only handle one text expression at a time,
+      # per https://docs.mongodb.com/manual/reference/operator/query/text/.
+      # Nonetheless we test that the query is built correctly when
+      # a user supplies more than one text condition.
+      it 'merges conditions' do
+        expect(Mongoid.logger).to receive(:warn)
+        expect(selection.selector).to eq('$and' => [
+            {'$text' => {'$search' => 'one'}}
+          ],
+          '$text' => {'$search' => 'two'},
+        )
       end
     end
   end
@@ -4159,7 +3979,7 @@ describe Mongoid::Criteria::Queryable::Selectable do
 
     context "when using the strategies via methods" do
 
-      context "when the values are a hash" do
+      context "when different operators are specified" do
 
         let(:selection) do
           query.gt(field: 5).lt(field: 10).ne(field: 7)
@@ -4172,7 +3992,7 @@ describe Mongoid::Criteria::Queryable::Selectable do
         end
       end
 
-      context "when the values are not hashes" do
+      context "when the same operator is specified" do
 
         let(:selection) do
           query.where(field: 5).where(field: 10)
@@ -4186,7 +4006,7 @@ describe Mongoid::Criteria::Queryable::Selectable do
 
     context "when using the strategies via #where" do
 
-      context "when the values are a hash" do
+      context "when using complex keys with different operators" do
 
         let(:selection) do
           query.where(:field.gt => 5, :field.lt => 10, :field.ne => 7)

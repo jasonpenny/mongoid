@@ -101,7 +101,7 @@ module Mongoid
         value = send(name)
         attrs[name] = value ? value.serializable_hash(options) : nil
       elsif names.include?(name) && !fields.key?(name)
-        attrs[name] = read_attribute(name)
+        attrs[name] = read_raw_attribute(name)
       elsif !attribute_missing?(name)
         attrs[name] = send(name)
       end
@@ -124,9 +124,9 @@ module Mongoid
     def serialize_relations(attributes = {}, options = {})
       inclusions = options[:include]
       relation_names(inclusions).each do |name|
-        metadata = relations[name.to_s]
-        if metadata && relation = send(metadata.name)
-          attributes[metadata.name.to_s] =
+        association = relations[name.to_s]
+        if association && relation = send(association.name)
+          attributes[association.name.to_s] =
             relation.serializable_hash(relation_options(inclusions, options, name))
         end
       end

@@ -168,7 +168,8 @@ describe Mongoid::Contextual::Mongo do
       end
     end
 
-    context 'when a collation is specified', if: collation_supported? do
+    context 'when a collation is specified' do
+      min_server_version '3.4'
 
       let(:context) do
         described_class.new(criteria)
@@ -229,7 +230,8 @@ describe Mongoid::Contextual::Mongo do
           expect(deleted).to eq(1)
         end
 
-        context 'when the criteria has a collation', if: collation_supported? do
+        context 'when the criteria has a collation' do
+          min_server_version '3.4'
 
           let(:criteria) do
             Band.where(name: "DEPECHE MODE").collation(locale: 'en_US', strength: 2)
@@ -333,7 +335,8 @@ describe Mongoid::Contextual::Mongo do
           expect(destroyed).to eq(1)
         end
 
-        context 'when the criteria has a collation', if: collation_supported? do
+        context 'when the criteria has a collation' do
+          min_server_version '3.4'
 
           let(:criteria) do
             Band.where(name: "DEPECHE MODE").collation(locale: 'en_US', strength: 2)
@@ -451,11 +454,12 @@ describe Mongoid::Contextual::Mongo do
       end
 
       it "returns the distinct field values" do
-        expect(context.distinct(:years)).to eq([ 30, 25 ])
+        expect(context.distinct(:years).sort).to eq([ 25, 30 ])
       end
     end
 
-    context 'when a collation is specified', if: collation_supported? do
+    context 'when a collation is specified' do
+      min_server_version '3.4'
 
       before do
         Band.create(name: 'DEPECHE MODE')
@@ -493,7 +497,8 @@ describe Mongoid::Contextual::Mongo do
       described_class.new(criteria)
     end
 
-    context 'when the criteria has a collation', if: collation_supported? do
+    context 'when the criteria has a collation' do
+      min_server_version '3.4'
 
       let(:criteria) do
         Band.where(name: "DEPECHE MODE").collation(locale: 'en_US', strength: 2)
@@ -577,6 +582,31 @@ describe Mongoid::Contextual::Mongo do
         end
       end
     end
+
+    context 'when the criteria has a parent document' do
+
+      before do
+        Post.create(person: person)
+        Post.create(person: person)
+        Post.create(person: person)
+      end
+
+      let(:person) do
+        Person.new
+      end
+
+      let(:criteria) do
+        person.posts.all
+      end
+
+      let(:persons) do
+        criteria.collect(&:person)
+      end
+
+      it 'sets the same parent object on each related object' do
+        expect(persons.uniq.size).to eq(1)
+      end
+    end
   end
 
   describe "#eager_load" do
@@ -591,12 +621,12 @@ describe Mongoid::Contextual::Mongo do
 
     context "when no documents are returned" do
 
-      let(:game_metadata) do
+      let(:game_association) do
         Person.reflect_on_association(:game)
       end
 
       it "does not make any additional database queries" do
-        expect(game_metadata).to receive(:eager_load).never
+        expect(game_association).to receive(:eager_load).never
         context.send(:eager_load, [])
       end
     end
@@ -825,7 +855,8 @@ describe Mongoid::Contextual::Mongo do
         end
       end
 
-      context 'when a collation is specified on the criteria', if: collation_supported? do
+      context 'when a collation is specified on the criteria' do
+        min_server_version '3.4'
 
         let(:criteria) do
           Band.where(name: "DEPECHE MODE").collation(locale: 'en_US', strength: 2)
@@ -978,7 +1009,8 @@ describe Mongoid::Contextual::Mongo do
         end
       end
 
-      context 'when a collation is specified on the criteria', if: collation_supported? do
+      context 'when a collation is specified on the criteria' do
+        min_server_version '3.4'
 
         let(:criteria) do
           Band.where(name: "DEPECHE MODE").collation(locale: 'en_US', strength: 2)
@@ -1052,7 +1084,8 @@ describe Mongoid::Contextual::Mongo do
         }.to raise_error(Mongoid::Errors::DocumentNotFound)
       end
 
-      context 'when a collation is specified on the criteria', if: collation_supported? do
+      context 'when a collation is specified on the criteria' do
+        min_server_version '3.4'
 
         let(:criteria) do
           Band.where(name: "DEPECHE MODE").collation(locale: 'en_US', strength: 2)
@@ -1124,7 +1157,8 @@ describe Mongoid::Contextual::Mongo do
           expect(context.send(method)).to eq(depeche_mode)
         end
 
-        context 'when the criteria has a collation', if: collation_supported? do
+        context 'when the criteria has a collation' do
+          min_server_version '3.4'
 
           let(:criteria) do
             Band.where(name: "DEPECHE MODE").collation(locale: 'en_US', strength: 2)
@@ -1528,6 +1562,10 @@ describe Mongoid::Contextual::Mongo do
       }}
     end
 
+    let(:ordered_results) do
+      results['results'].sort_by { |doc| doc['_id'] }
+    end
+
     context "when no selection is provided" do
 
       let(:criteria) do
@@ -1559,36 +1597,40 @@ describe Mongoid::Contextual::Mongo do
       end
 
       it "contains the entire raw results" do
-        expect(results["results"]).to eq([
+        expect(ordered_results).to eq([
           { "_id" => "Depeche Mode", "value" => { "likes" => 200 }},
           { "_id" => "Tool", "value" => { "likes" => 100 }}
         ])
       end
 
-      it "contains the execution time" do
-        expect(results.time).to_not be_nil
-      end
+      context 'when statistics are available' do
+        max_server_version '4.2'
 
-      it "contains the count statistics" do
-        expect(results["counts"]).to eq({
-          "input" => 2, "emit" => 2, "reduce" => 0, "output" => 2
-        })
-      end
+        it "contains the execution time" do
+          expect(results.time).to_not be_nil
+        end
 
-      it "contains the input count" do
-        expect(results.input).to eq(2)
-      end
+        it "contains the count statistics" do
+          expect(results["counts"]).to eq({
+            "input" => 2, "emit" => 2, "reduce" => 0, "output" => 2
+          })
+        end
 
-      it "contains the emitted count" do
-        expect(results.emitted).to eq(2)
-      end
+        it "contains the input count" do
+          expect(results.input).to eq(2)
+        end
 
-      it "contains the reduced count" do
-        expect(results.reduced).to eq(0)
-      end
+        it "contains the emitted count" do
+          expect(results.emitted).to eq(2)
+        end
 
-      it "contains the output count" do
-        expect(results.output).to eq(2)
+        it "contains the reduced count" do
+          expect(results.reduced).to eq(0)
+        end
+
+        it "contains the output count" do
+          expect(results.output).to eq(2)
+        end
       end
     end
 
@@ -1617,35 +1659,39 @@ describe Mongoid::Contextual::Mongo do
       end
 
       it "contains the entire raw results" do
-        expect(results["results"]).to eq([
+        expect(ordered_results).to eq([
           { "_id" => "Depeche Mode", "value" => { "likes" => 200 }}
         ])
       end
 
-      it "contains the execution time" do
-        expect(results.time).to_not be_nil
-      end
+      context 'when statistics are available' do
+        max_server_version '4.2'
 
-      it "contains the count statistics" do
-        expect(results["counts"]).to eq({
-          "input" => 1, "emit" => 1, "reduce" => 0, "output" => 1
-        })
-      end
+        it "contains the execution time" do
+          expect(results.time).to_not be_nil
+        end
 
-      it "contains the input count" do
-        expect(results.input).to eq(1)
-      end
+        it "contains the count statistics" do
+          expect(results["counts"]).to eq({
+            "input" => 1, "emit" => 1, "reduce" => 0, "output" => 1
+          })
+        end
 
-      it "contains the emitted count" do
-        expect(results.emitted).to eq(1)
-      end
+        it "contains the input count" do
+          expect(results.input).to eq(1)
+        end
 
-      it "contains the reduced count" do
-        expect(results.reduced).to eq(0)
-      end
+        it "contains the emitted count" do
+          expect(results.emitted).to eq(1)
+        end
 
-      it "contains the output count" do
-        expect(results.output).to eq(1)
+        it "contains the reduced count" do
+          expect(results.reduced).to eq(0)
+        end
+
+        it "contains the output count" do
+          expect(results.output).to eq(1)
+        end
       end
     end
 
@@ -1685,7 +1731,7 @@ describe Mongoid::Contextual::Mongo do
       end
 
       it "contains the entire raw results" do
-        expect(results["results"]).to eq([
+        expect(ordered_results).to eq([
           { "_id" => "Depeche Mode", "value" => { "likes" => 200 }},
           { "_id" => "Tool", "value" => { "likes" => 100 }}
         ])
@@ -1693,6 +1739,9 @@ describe Mongoid::Contextual::Mongo do
     end
 
     context "when limiting is provided" do
+      # map/reduce with limit is not supported on sharded clusters:
+      # https://jira.mongodb.org/browse/SERVER-2099
+      require_topology :single, :replica_set
 
       let(:criteria) do
         Band.limit(1)
@@ -2133,7 +2182,8 @@ describe Mongoid::Contextual::Mongo do
       end
     end
 
-    context 'when provided array filters', if: array_filters_supported? do
+    context 'when provided array filters' do
+      min_server_version '3.6'
 
       before do
         Band.delete_all
@@ -2305,7 +2355,8 @@ describe Mongoid::Contextual::Mongo do
       end
     end
 
-    context 'when provided array filters', if: array_filters_supported? do
+    context 'when provided array filters' do
+      min_server_version '3.6'
 
       before do
         Band.delete_all
@@ -2328,7 +2379,7 @@ describe Mongoid::Contextual::Mongo do
 
       let!(:update) do
         context.update_all({ '$set' => { 'labels.$[i].name' => 'Sony' } },
-                           array_filters: [{ 'i.name' => 'Cbs' }])
+                       array_filters: [{ 'i.name' => 'Cbs' }])
       end
 
       it 'applies the array filters' do
@@ -2343,7 +2394,7 @@ describe Mongoid::Contextual::Mongo do
 
   describe '#pipeline' do
 
-    context 'when the criteria has a selector', if: non_legacy_server? do
+    context 'when the criteria has a selector' do
 
       before do
         Artist.index(name: "text")
@@ -2363,7 +2414,7 @@ describe Mongoid::Contextual::Mongo do
       end
 
       it 'creates a pipeline with the selector as one of the $match criteria' do
-        expect(pipeline_match).to include({ :'$text' => { :'$search' => "New Order" } })
+        expect(pipeline_match).to include({ '$text' => { '$search' => "New Order" } })
       end
 
       it 'creates a pipeline with the $exists operator as one of the $match criteria' do

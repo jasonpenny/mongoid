@@ -49,6 +49,29 @@ describe Mongoid::Criteria::Modifiable do
         end
       end
     end
+
+    context 'when the object is polymorphic' do
+
+      let(:movie) do
+        Movie.new
+      end
+
+      let(:criteria) do
+        Rating.where(ratable: movie)
+      end
+
+      let(:document) do
+        criteria.create
+      end
+
+      it 'sets the polymorphic id' do
+        expect(document.ratable_id).to eq(movie.id)
+      end
+
+      it 'sets the type field' do
+        expect(document.ratable_type).to eq('Movie')
+      end
+    end
   end
 
   describe "#create!" do
@@ -63,6 +86,29 @@ describe Mongoid::Criteria::Modifiable do
         expect {
           criteria.create!
         }.to raise_error(Mongoid::Errors::Validations)
+      end
+    end
+
+    context 'when the object is polymorphic' do
+
+      let(:movie) do
+        Movie.new
+      end
+
+      let(:criteria) do
+        Rating.where(ratable: movie)
+      end
+
+      let(:document) do
+        criteria.create!
+      end
+
+      it 'sets the polymorphic id' do
+        expect(document.ratable_id).to eq(movie.id)
+      end
+
+      it 'sets the type field' do
+        expect(document.ratable_type).to eq('Movie')
       end
     end
   end
@@ -295,6 +341,25 @@ describe Mongoid::Criteria::Modifiable do
           expect(person.pets).to be true
         end
       end
+
+      context 'when the object is polymorphic' do
+
+        let(:movie) do
+          Movie.new
+        end
+
+        let(:document) do
+          Rating.find_or_create_by(ratable: movie)
+        end
+
+        it 'sets the polymorphic id' do
+          expect(document.ratable_id).to eq(movie.id)
+        end
+
+        it 'sets the type field' do
+          expect(document.ratable_type).to eq('Movie')
+        end
+      end
     end
   end
 
@@ -447,6 +512,25 @@ describe Mongoid::Criteria::Modifiable do
         end
       end
     end
+
+    context 'when the object is polymorphic' do
+
+      let(:movie) do
+        Movie.new
+      end
+
+      let(:document) do
+        Rating.find_or_create_by!(ratable: movie)
+      end
+
+      it 'sets the polymorphic id' do
+        expect(document.ratable_id).to eq(movie.id)
+      end
+
+      it 'sets the type field' do
+        expect(document.ratable_type).to eq('Movie')
+      end
+    end
   end
 
   describe ".find_or_initialize_by" do
@@ -498,6 +582,25 @@ describe Mongoid::Criteria::Modifiable do
         it "calls the block" do
           expect(person.pets).to be true
         end
+      end
+    end
+
+    context 'when the object is polymorphic' do
+
+      let(:movie) do
+        Movie.new
+      end
+
+      let(:document) do
+        Rating.find_or_initialize_by(ratable: movie)
+      end
+
+      it 'sets the polymorphic id' do
+        expect(document.ratable_id).to eq(movie.id)
+      end
+
+      it 'sets the type field' do
+        expect(document.ratable_type).to eq('Movie')
       end
     end
   end
@@ -649,7 +752,7 @@ describe Mongoid::Criteria::Modifiable do
             band = Band.create
             Mongoid::Criteria.new(Record) do |criteria|
               criteria.embedded = true
-              criteria.metadata = Band.reflect_on_association(:records)
+              criteria.association = Band.reflect_on_association(:records)
               criteria.parent_document = band
               criteria.selector = { "records" => { "producers"=>{"$in"=>["nonexistent"] } } }
             end
@@ -700,6 +803,29 @@ describe Mongoid::Criteria::Modifiable do
 
         it "returns a persisted document" do
           expect(document).to be_persisted
+        end
+      end
+
+      context 'when the object is polymorphic' do
+
+        let(:movie) do
+          Movie.new
+        end
+
+        let(:criteria) do
+          Rating.where(ratable: movie)
+        end
+
+        let(:document) do
+          criteria.first_or_create
+        end
+
+        it 'sets the polymorphic id' do
+          expect(document.ratable_id).to eq(movie.id)
+        end
+
+        it 'sets the type field' do
+          expect(document.ratable_type).to eq('Movie')
         end
       end
 
@@ -919,6 +1045,29 @@ describe Mongoid::Criteria::Modifiable do
         end
       end
     end
+
+    context 'when the object is polymorphic' do
+
+      let(:movie) do
+        Movie.new
+      end
+
+      let(:criteria) do
+        Rating.where(ratable: movie)
+      end
+
+      let(:document) do
+        criteria.first_or_create!
+      end
+
+      it 'sets the polymorphic id' do
+        expect(document.ratable_id).to eq(movie.id)
+      end
+
+      it 'sets the type field' do
+        expect(document.ratable_type).to eq('Movie')
+      end
+    end
   end
 
   describe "first_or_initialize" do
@@ -935,6 +1084,29 @@ describe Mongoid::Criteria::Modifiable do
 
       it "returns the document" do
         expect(found).to eq(band)
+      end
+    end
+
+    context 'when the object is polymorphic' do
+
+      let(:movie) do
+        Movie.new
+      end
+
+      let(:criteria) do
+        Rating.where(ratable: movie)
+      end
+
+      let(:document) do
+        criteria.first_or_initialize
+      end
+
+      it 'sets the polymorphic id' do
+        expect(document.ratable_id).to eq(movie.id)
+      end
+
+      it 'sets the type field' do
+        expect(document.ratable_type).to eq('Movie')
       end
     end
 
@@ -1471,11 +1643,15 @@ describe Mongoid::Criteria::Modifiable do
         { 'username' => 'Turnip' }
       end
 
-      it 'returns a criteria with the defined attributes' do
-        expect(Person.create_with(attrs).selector).to eq(attrs)
+      it 'does not modify the selector' do
+        expect(Person.create_with(attrs).selector[:username]).to be_nil
       end
 
-      context 'when a method is chained' do
+      it 'create_attrs is modified' do
+        expect(Person.create_with(attrs).create_attrs).to eq(attrs)
+      end
+
+      context 'when a create is chained' do
 
         context 'when a write method is chained' do
 
@@ -1499,6 +1675,25 @@ describe Mongoid::Criteria::Modifiable do
             expect(new_person.age).to eq(50)
           end
 
+          context 'when a matching document is already in the collection' do
+            let(:query) do
+              { 'username' => 'foo', 'age' => 12 }
+            end
+
+            let(:person) do
+              Person.create!(query)
+            end
+
+            let(:found_person) do
+              Person.create_with(attrs).find_or_create_by(query)
+            end
+
+            it 'finds the matching document' do
+              person
+              expect(found_person.id).to eq(person.id)
+            end
+          end
+
           context 'when the attributes are shared with the write method args' do
 
             let(:query) do
@@ -1509,7 +1704,7 @@ describe Mongoid::Criteria::Modifiable do
               Person.create_with(attrs).find_or_create_by(query)
             end
 
-            it 'gives the write method args precedence' do
+            it 'gives the find method args precedence' do
               expect(new_person.username).to eq('Beet')
               expect(new_person.age).to eq(50)
             end
@@ -1536,8 +1731,12 @@ describe Mongoid::Criteria::Modifiable do
             { 'username' => 'Beet', 'age' => 50 }
           end
 
+          it 'does not modify the selector' do
+            expect(criteria.create_with(attrs).selector).to eq(criteria_selector)
+          end
+
           it 'overwrites all the original attributes' do
-            expect(criteria.create_with(attrs).selector).to eq(attrs)
+            expect(criteria.create_with(attrs).create_attrs).to eq(attrs)
           end
         end
       end
@@ -1548,8 +1747,12 @@ describe Mongoid::Criteria::Modifiable do
           { 'username' => 'Beet' }
         end
 
+        it 'does not modify the selector' do
+          expect(criteria.create_with(attrs).selector).to eq(criteria_selector)
+        end
+
         it 'only overwrites the shared attributes' do
-          expect(criteria.create_with(attrs).selector).to eq(criteria_selector.merge!(attrs))
+          expect(criteria.create_with(attrs).create_attrs).to eq(attrs)
         end
       end
 
@@ -1558,12 +1761,11 @@ describe Mongoid::Criteria::Modifiable do
         let(:attrs) do
           { 'username' => 'Turnip' }
         end
-
         let(:query) do
           { 'username' => 'Beet', 'age' => 50 }
         end
 
-        context 'when a write method is chained' do
+        context 'when a create method is chained' do
 
           it 'executes the method' do
             expect(criteria.create_with(attrs).new.username).to eq('Turnip')
@@ -1577,9 +1779,28 @@ describe Mongoid::Criteria::Modifiable do
             criteria.create_with(attrs).find_or_create_by(query)
           end
 
-          it 'executes the query' do
+          it 'gives the find method arg precedence' do
             expect(new_person.username).to eq('Beet')
-            expect(new_person.age).to eq(50)
+            expect(new_person.age).to be(50)
+          end
+
+          context 'when a matching document is already in the collection' do
+            let(:query) do
+              { 'username' => 'foo', 'age' => 12 }
+            end
+
+            let(:person) do
+              Person.create!(query)
+            end
+
+            let(:found_person) do
+              criteria.create_with(attrs).find_or_create_by(query)
+            end
+
+            it 'finds the matching document' do
+              person
+              expect(found_person.id).to eq(person.id)
+            end
           end
         end
       end

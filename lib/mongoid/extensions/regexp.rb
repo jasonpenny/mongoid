@@ -9,7 +9,7 @@ module Mongoid
         # type.
         #
         # @example Mongoize the object.
-        #   Regexp.mongoize(/^[abc]/)
+        #   Regexp.mongoize(/\A[abc]/)
         #
         # @param [ Regexp, String ] object The object to mongoize.
         #
@@ -17,6 +17,7 @@ module Mongoid
         #
         # @since 3.0.0
         def mongoize(object)
+          return nil if object.nil?
           ::Regexp.new(object)
         end
       end

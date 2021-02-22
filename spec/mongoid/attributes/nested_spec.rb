@@ -12,10 +12,12 @@ describe Mongoid::Attributes::Nested do
 
       before do
         Person.accepts_nested_attributes_for :favorites
+        Person.accepts_nested_attributes_for :children
       end
 
       after do
         Person.send(:undef_method, :favorites_attributes=)
+        Person.send(:undef_method, :children_attributes=)
         Person.nested_attributes.clear
       end
 
@@ -23,9 +25,18 @@ describe Mongoid::Attributes::Nested do
         expect(person).to respond_to(:favorites_attributes=)
       end
 
+      it "does not autosave if the association is embedded" do
+        expect(person).not_to respond_to(:autosave_documents_for_favorites)
+      end
+
+      it "autosaves if the association is not embedded" do
+        expect(person).to respond_to(:autosave_documents_for_children)
+      end
+
       it "adds the method name to the nested attributes list" do
         expect(Person.nested_attributes).to eq({
-          "favorites_attributes" => "favorites_attributes="
+          "favorites_attributes" => "favorites_attributes=",
+          "children_attributes" => "children_attributes="
         })
       end
     end
@@ -41,12 +52,12 @@ describe Mongoid::Attributes::Nested do
         Account.nested_attributes.clear
       end
 
-      let(:metadata) do
+      let(:association) do
         Account.reflect_on_association(:alerts)
       end
 
       it "keeps autosave set to false" do
-        expect(metadata).to_not be_autosave
+        expect(association).to_not be_autosave
       end
     end
   end
@@ -202,7 +213,12 @@ describe Mongoid::Attributes::Nested do
     context "when the relation is a referenced in" do
 
       before do
-        Post.accepts_nested_attributes_for :person
+        Post.accepts_nested_attributes_for :person, autosave: false
+      end
+
+      after do
+        Post.send(:undef_method, :person_attributes=)
+        Post.nested_attributes.clear
       end
 
       after do
@@ -4381,12 +4397,11 @@ describe Mongoid::Attributes::Nested do
 
     context "when nesting multiple levels and parent is timestamped" do
 
-      before do
-        class Address
-          after_save do
-            addressable.touch
-          end
-        end
+      around do |example|
+        original_relations = Location.relations
+        Location.embedded_in :address, touch: true
+        example.run
+        Location.relations = original_relations
       end
 
       after do
@@ -4764,6 +4779,13 @@ describe Mongoid::Attributes::Nested do
 
         before do
           user.update_attributes(params)
+        end
+
+        around do |example|
+          original_relations = User.relations
+          User.has_many :posts, foreign_key: :author_id, validate: false, autosave: true
+          example.run
+          user.relations = original_relations
         end
 
         let(:post) do

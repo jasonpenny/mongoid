@@ -15,12 +15,12 @@ describe Mongoid::Document do
   end
 
   describe "#_destroy" do
-  
+
     it "default to false" do
       expect(Person.new._destroy).to be false
     end
   end
-  
+
   describe ".included" do
 
     let(:models) do
@@ -94,11 +94,11 @@ describe Mongoid::Document do
     context "when the document is not subclassed" do
 
       let(:types) do
-        Address._types
+        Kangaroo._types
       end
 
       it "returns the document" do
-        expect(types).to eq([ "Address" ])
+        expect(types).to eq([ "Kangaroo" ])
       end
     end
 
@@ -385,6 +385,27 @@ describe Mongoid::Document do
       Person.new(title: "Sir")
     end
 
+    describe 'id' do
+      context 'rails < 6' do
+        max_rails_version '5.2'
+
+        it 'is a BSON::ObjectId' do
+          id = person.as_json['_id']
+          expect(id).to be_a(BSON::ObjectId)
+        end
+      end
+
+      context 'rails >= 6' do
+        min_rails_version '6.0'
+
+        it 'is a hash with $oid' do
+          id = person.as_json['_id']
+          expect(id).to be_a(Hash)
+          expect(id['$oid']).to be_a(String)
+        end
+      end
+    end
+
     context "when no options are provided" do
 
       it "does not apply any options" do
@@ -430,6 +451,64 @@ describe Mongoid::Document do
 
         it "applies the Mongoid-specific options" do
           expect(person.as_json(options).keys).not_to include("ssn")
+        end
+      end
+    end
+
+    context ':compact option' do
+      # Since rails 6 differs in how it treats id fields,
+      # run this test on one version of rails. Currently rails 6 is in beta,
+      # when it is released this version should be changed to 6.
+      max_rails_version '5.2'
+
+      before do
+        # These tests require a specific set of defined attributes
+        # on the model
+        expect(church.as_json.keys.sort).to eq(%w(_id location name))
+      end
+
+      context 'there is a nil valued attribute' do
+        let(:church) do
+          Church.create!(name: 'St. Basil')
+        end
+
+        it 'returns non-nil fields and _id only' do
+          actual = church.as_json(compact: true)
+          expect(actual).to eq('_id' => church.id, 'name' => 'St. Basil')
+        end
+      end
+
+      context 'all attrbutes are nil valued' do
+        let(:church) do
+          Church.create!
+        end
+
+        it 'returns a hash with _id only' do
+          actual = church.as_json(compact: true)
+          expect(actual).to eq('_id' => church.id)
+        end
+      end
+
+      context 'there are no nil valued attributes' do
+        let(:church) do
+          Church.create!(name: 'St. Basil', location: {})
+        end
+
+        it 'returns all fields and _id' do
+          actual = church.as_json(compact: true)
+          expect(actual).to eq('_id' => church.id, 'name' => 'St. Basil',
+            'location' => {})
+        end
+      end
+
+      context 'when option is specified as a truthy value' do
+        let(:church) do
+          Church.create!(name: 'St. Basil')
+        end
+
+        it 'returns non-nil fields and _id only' do
+          actual = church.as_json(compact: 1)
+          expect(actual).to eq('_id' => church.id, 'name' => 'St. Basil')
         end
       end
     end

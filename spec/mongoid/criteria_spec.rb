@@ -285,8 +285,23 @@ describe Mongoid::Criteria do
       Band.where(name: "Depeche Mode")
     end
 
-    it "returns the criteria as a json hash" do
-      expect(criteria.as_json).to eq([ band.serializable_hash ])
+    # as_json changed in rails 6 to call as_json on serializable_hash.
+    # https://github.com/rails/rails/commit/2e5cb980a448e7f4ab00df6e9ad4c1cc456616aa
+
+    context 'rails < 6' do
+      max_rails_version '5.2'
+
+      it "returns the criteria as a json hash" do
+        expect(criteria.as_json).to eq([ band.serializable_hash ])
+      end
+    end
+
+    context 'rails >= 6' do
+      min_rails_version '6.0'
+
+      it "returns the criteria as a json hash" do
+        expect(criteria.as_json).to eq([ band.serializable_hash.as_json ])
+      end
     end
   end
 
@@ -975,6 +990,7 @@ describe Mongoid::Criteria do
   end
 
   describe "#geo_near" do
+    max_server_version '4.0'
 
     before do
       Bar.create_indexes
@@ -1444,18 +1460,18 @@ describe Mongoid::Criteria do
       end
     end
 
-    context "when including the same metadata multiple times" do
+    context "when including the same association multiple times" do
 
       let(:criteria) do
         Person.all.includes(:posts, :posts).includes(:posts)
       end
 
-      let(:metadata) do
+      let(:association) do
         Person.reflect_on_association(:posts)
       end
 
-      it "does not duplicate the metadata in the inclusions" do
-        expect(criteria.inclusions).to eq([ metadata ])
+      it "does not duplicate the association in the inclusions" do
+        expect(criteria.inclusions).to eq([ association ])
       end
     end
 
@@ -2217,12 +2233,12 @@ describe Mongoid::Criteria do
       Band.includes(:records)
     end
 
-    let(:metadata) do
+    let(:association) do
       Band.relations["records"]
     end
 
     it "returns the inclusions" do
-      expect(criteria.inclusions).to eq([ metadata ])
+      expect(criteria.inclusions).to eq([ association ])
     end
   end
 
@@ -2232,16 +2248,16 @@ describe Mongoid::Criteria do
       Band.all
     end
 
-    let(:metadata) do
+    let(:association) do
       Band.relations["records"]
     end
 
     before do
-      criteria.inclusions = [ metadata ]
+      criteria.inclusions = [ association ]
     end
 
     it "sets the inclusions" do
-      expect(criteria.inclusions).to eq([ metadata ])
+      expect(criteria.inclusions).to eq([ association ])
     end
   end
 
@@ -2318,7 +2334,7 @@ describe Mongoid::Criteria do
       end
 
       it "returns the map/reduce results" do
-        expect(map_reduce).to eq([
+        expect(map_reduce.sort_by { |doc| doc['_id'] }).to eq([
           { "_id" => "Depeche Mode", "value" => { "likes" => 200 }},
           { "_id" => "Tool", "value" => { "likes" => 100 }}
         ])
@@ -2409,7 +2425,7 @@ describe Mongoid::Criteria do
         end
       end
 
-      let(:metadata) do
+      let(:association) do
         Band.relations["records"]
       end
 
@@ -2434,7 +2450,7 @@ describe Mongoid::Criteria do
       end
 
       it "merges the inclusions" do
-        expect(merged.inclusions).to eq([ metadata ])
+        expect(merged.inclusions).to eq([ association ])
       end
 
       it "returns a new criteria" do
@@ -2448,7 +2464,7 @@ describe Mongoid::Criteria do
         { klass: Band, includes: [ :records ] }
       end
 
-      let(:metadata) do
+      let(:association) do
         Band.relations["records"]
       end
 
@@ -2469,7 +2485,7 @@ describe Mongoid::Criteria do
       end
 
       it "merges the inclusions" do
-        expect(merged.inclusions).to eq([ metadata ])
+        expect(merged.inclusions).to eq([ association ])
       end
 
       it "returns a new criteria" do
@@ -2494,7 +2510,7 @@ describe Mongoid::Criteria do
       end
     end
 
-    let(:metadata) do
+    let(:association) do
       Band.relations["records"]
     end
 
@@ -2519,7 +2535,7 @@ describe Mongoid::Criteria do
     end
 
     it "merges the inclusions" do
-      expect(merged.inclusions).to eq([ metadata ])
+      expect(merged.inclusions).to eq([ association ])
     end
 
     it "returns the same criteria" do
@@ -3321,6 +3337,8 @@ describe Mongoid::Criteria do
   end
 
   describe "#max_scan" do
+    max_server_version '4.0'
+
     let!(:band) do
       Band.create(name: "Depeche Mode")
     end
@@ -3465,7 +3483,7 @@ describe Mongoid::Criteria do
       context "when querying on a big decimal" do
 
         let(:sales) do
-          BigDecimal.new('0.1')
+          BigDecimal('0.1')
         end
 
         let!(:band) do
@@ -3481,7 +3499,8 @@ describe Mongoid::Criteria do
         end
       end
 
-      context "when querying on a BSON::Decimal128", if: decimal128_supported? do
+      context "when querying on a BSON::Decimal128" do
+        min_server_version '3.4'
 
         let(:decimal) do
           BSON::Decimal128.new("0.0005")
@@ -3535,6 +3554,7 @@ describe Mongoid::Criteria do
     end
 
     context "when the code has scope" do
+      max_server_version '4.2'
 
       let(:criteria) do
         Band.for_js("this.name == param", param: "Depeche Mode")
