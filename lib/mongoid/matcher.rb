@@ -54,6 +54,33 @@ module Mongoid
             exists = src.key?(field)
             src = src[field]
           when Array
+            # it might be simpler to avoid entering the `if` block of if (index = field.to_i).to_s == field
+            # if we are expanded and any (?) Hashes in the Array have the key?
+            if expanded
+              new = []
+              src.each do |doc|
+                case doc
+                when Hash
+                  if doc.key?(field)
+                    v = doc[field]
+                    case v
+                    when Array
+                      new += v
+                    else
+                      new += [v]
+                    end
+                  end
+                else
+                  # Trying to hash index into a value that is not a hash
+                end
+              end
+
+              if new.length > 0
+                src = new
+                next
+              end
+            end
+
             # Array indexing
             exists = index < src.length
             src = src[index]
